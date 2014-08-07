@@ -2,7 +2,7 @@
 module.exports = {
   oauthd_url: "https://oauth.io",
   oauthd_api: "https://oauth.io/api",
-  version: "web-0.2.1",
+  version: "web-0.2.4",
   options: {}
 };
 
@@ -158,7 +158,8 @@ module.exports = function(window, document, jQuery, navigator) {
           return res;
         },
         popup: function(provider, opts, callback) {
-          var defer, frm, getMessage, res, url, wnd, wndTimeout, wnd_options, wnd_settings, _ref;
+          var defer, frm, getMessage, gotmessage, interval, res, url, wnd, wndTimeout, wnd_options, wnd_settings, _ref;
+          gotmessage = false;
           getMessage = function(e) {
             if (e.origin !== config.oauthd_base) {
               return;
@@ -167,7 +168,8 @@ module.exports = function(window, document, jQuery, navigator) {
               wnd.close();
             } catch (_error) {}
             opts.data = e.data;
-            return oauthio.request.sendCallback(opts, defer);
+            oauthio.request.sendCallback(opts, defer);
+            return gotmessage = true;
           };
           wnd = void 0;
           frm = void 0;
@@ -301,6 +303,19 @@ module.exports = function(window, document, jQuery, navigator) {
           wnd = window.open(url, "Authorization", wnd_options);
           if (wnd) {
             wnd.focus();
+            interval = window.setInterval(function() {
+              if (wnd === null || wnd.closed) {
+                window.clearInterval(interval);
+                if (!gotmessage) {
+                  if (defer != null) {
+                    defer.reject(new Error("The popup was closed"));
+                  }
+                  if (opts.callback && typeof opts.callback === "function") {
+                    return opts.callback(new Error("The popup was closed"));
+                  }
+                }
+              }
+            }, 500);
           } else {
             if (defer != null) {
               defer.reject(new Error("Could not open a popup"));
@@ -649,7 +664,7 @@ module.exports = function($, config, client_states, cache, providers_api) {
       };
     },
     sendCallback: function(opts, defer) {
-      var base, data, e, err, i, make_res, request, res, tokens;
+      var base, data, e, err, i, k, make_res, request, res, tokens, v;
       base = this;
       data = void 0;
       err = void 0;
@@ -700,7 +715,12 @@ module.exports = function($, config, client_states, cache, providers_api) {
           return;
         }
       }
-      if (!data.state || client_states.indexOf(data.state) === -1) {
+      data.state = data.state.replace(/\s+/g, "");
+      for (k in client_states) {
+        v = client_states[k];
+        client_states[k] = v.replace(/\s+/g, "");
+      }
+      if (!data.state || !client_states.indexOf(data.state) === -1) {
         if (defer != null) {
           defer.reject(new Error("State is not matching"));
         }
